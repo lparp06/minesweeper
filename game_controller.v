@@ -8,6 +8,7 @@ module game_controller (
     input  wire [3:0]  KEY,
     input  wire [9:0]  SW,
     output wire [23:0] color_out,
+	 output wire [5:0]  reveal_count,
     output reg         endgame,
     output reg         win
 );
@@ -35,7 +36,7 @@ module game_controller (
         .adj(adj)
     );
 
-    wire [5:0] reveal_count;
+
     wire       mine_found;
 
     render board (

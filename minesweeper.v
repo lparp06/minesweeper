@@ -27,6 +27,7 @@ module minesweeper(
     );
 
    wire [23:0] color_out;
+	wire [5:0] reveal_count;
    wire endgame, win;
 
    game_controller game (
@@ -38,6 +39,7 @@ module minesweeper(
       .KEY(KEY),
       .SW(SW),
       .color_out(color_out),
+		.reveal_count(reveal_count),
       .endgame(endgame),
       .win(win)
    );
@@ -68,8 +70,14 @@ module minesweeper(
 
    always @(*) {VGA_R, VGA_G, VGA_B} = screen_out;
 
-   assign HEX0 = 7'b1111111;
-   assign HEX1 = 7'b1111111;
+	wire [6:0] tens_dig;
+	wire [6:0] ones_dig;
+	
+	seven_segment ones (reveal_count % 10, ones_dig);
+	seven_segment tens (reveal_count / 10, tens_dig);
+	
+   assign HEX0 = ones_dig;
+   assign HEX1 = tens_dig;
    assign HEX2 = 7'b1111111;
    assign HEX3 = 7'b1111111;
 

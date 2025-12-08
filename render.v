@@ -111,7 +111,12 @@ tile_state state (
     .reveal(reveal_edge),
     .flagged(flagged_w),
     .revealed(revealed_w),
-    .reveal_count(reveal_count)
+);
+
+
+pop_count counter(
+	.input_number(revealed_w),	
+	.out(reveal_count),
 );
 
 wire mine_here     = mine_map[tile_index];
