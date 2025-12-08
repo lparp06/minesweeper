@@ -1,93 +1,76 @@
 module minesweeper(
-    input           CLOCK_50,
-    input   [3:0]   KEY,
-    input   [9:0]   SW,
-    output  [6:0]   HEX0,
-    output  [6:0]   HEX1,
-    output  [6:0]   HEX2,
-    output  [6:0]   HEX3,
-    output          VGA_BLANK_N,
-    output reg [7:0]VGA_B,
-    output          VGA_CLK,
-    output reg [7:0]VGA_G,
-    output          VGA_HS,
-    output reg [7:0]VGA_R,
-    output          VGA_SYNC_N,
-    output          VGA_VS
+    input CLOCK_50,
+    input [3:0] KEY,
+    input [9:0] SW,
+    output [6:0] HEX0, HEX1, HEX2, HEX3,
+    output VGA_BLANK_N, VGA_CLK, VGA_HS, VGA_SYNC_N, VGA_VS,
+    output reg [7:0] VGA_R, VGA_G, VGA_B
 );
 
-    // ------------------------------------------------------
-    // Turn off HEX displays
-    // ------------------------------------------------------
-    assign HEX0 = 7'h00;
-    assign HEX1 = 7'h00;
-    assign HEX2 = 7'h00;
-    assign HEX3 = 7'h00;
+   wire clk   = CLOCK_50;
+   wire rst   = SW[0];
+   wire start = SW[1];
 
-    // ------------------------------------------------------
-    // Clock and reset
-    // ------------------------------------------------------
-    wire clk;
-    wire rst;
-    assign clk = CLOCK_50;
-    assign rst = SW[0];
-
-    // ------------------------------------------------------
-    // VGA signals
-    // ------------------------------------------------------
-    wire active_pixels;
-    wire [9:0] x;
-    wire [9:0] y;
-
-    // ------------------------------------------------------
-    // VGA driver
-    // ------------------------------------------------------
-    vga_driver the_vga(
-        .clk(clk),
-        .rst(rst),
+   wire active_pixels;
+   wire [9:0] x, y;
+	
+	
+   vga_driver the_vga(
+        .clk(clk), .rst(rst),
         .vga_clk(VGA_CLK),
         .hsync(VGA_HS),
         .vsync(VGA_VS),
         .active_pixels(active_pixels),
-        .xPixel(x),
-        .yPixel(y),
+        .xPixel(x), .yPixel(y),
         .VGA_BLANK_N(VGA_BLANK_N),
         .VGA_SYNC_N(VGA_SYNC_N)
     );
-	 
-	 wire [63:0] mine_map = 64'b001100000000111000010000000000100000000010000000000010000000100;
 
-    // ------------------------------------------------------
-    // Tile highlight with mines
-    // ------------------------------------------------------
-    wire [23:0] tile_color_out;
-	 wire [255:0]adj;
-	 wire done; 
-	 adj_fsm nums (.clk(clk),
-					  .rst(rst),
-	              .mine_map(mine_map),
-					  .adj(adj),
-					  .done(done));
+   wire [23:0] color_out;
+   wire endgame, win;
 
-   render board (
-        .clk(clk),
-        .rst(rst),
-        .active_pixels(active_pixels),
-        .x(x),
-        .y(y),
-        .keys(KEY),
-		  .mine_map(mine_map),
-		  .switches(SW[9:8]),
-		  .adj(adj),
-        .color_out(tile_color_out)
-    );
+   game_controller game (
+      .clk(clk),
+      .rst(rst),
+      .start(start),
+      .active_pixels(active_pixels),
+      .x(x), .y(y),
+      .KEY(KEY),
+      .SW(SW),
+      .color_out(color_out),
+      .endgame(endgame),
+      .win(win)
+   );
 
+   // Top-level FSM for screen control
+   localparam START=0, PLAYING=1, DONE=2;
+   reg [1:0] S, NS;
+   always @(posedge clk or negedge rst) S <= !rst ? START : NS;
+   always @(*) begin
+       case(S)
+           START:   NS = start ? PLAYING : START;
+           PLAYING: NS = endgame ? DONE : PLAYING;
+           DONE:    NS = DONE;
+           default: NS = START;
+       endcase
+   end
 
-    // ------------------------------------------------------
-    // Assign VGA color
-    // ------------------------------------------------------
-    always @(*) begin
-        {VGA_R, VGA_G, VGA_B} = tile_color_out;
-    end
+   reg [23:0] screen_out;
+   always @(posedge clk or negedge rst) begin
+       if (!rst) screen_out <= 24'h000000;
+       else case(S)
+           START:   screen_out <= 24'h0000FF; // blue start
+           PLAYING: screen_out <= color_out;  // game rendering
+           DONE:    screen_out <= win ? 24'h00FF00 : 24'hFF0000; // green win / red loss
+           default: screen_out <= 24'hFF0000;
+       endcase
+   end
+
+   always @(*) {VGA_R, VGA_G, VGA_B} = screen_out;
+
+   assign HEX0 = 7'b1111111;
+   assign HEX1 = 7'b1111111;
+   assign HEX2 = 7'b1111111;
+   assign HEX3 = 7'b1111111;
 
 endmodule

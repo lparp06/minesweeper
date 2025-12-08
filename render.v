@@ -8,27 +8,25 @@ module render (
     input  wire [63:0] mine_map,
     input  wire [9:0]  switches,
     input  wire [255:0] adj,
-    output reg  [23:0] color_out
+    output reg  [23:0] color_out,
+    output wire [5:0]  reveal_count,
+    output reg         mine_found
 );
 
 parameter TILE_SIZE = 60,
           BORDER    = 4,
-          GRID_SIZE = 8; // 8x8 grid
+          GRID_SIZE = 8;
 
 //------------------------------------------------------
-// Cursor tile position (sel_x, sel_y)
+// Cursor tile position
 //------------------------------------------------------
 reg [2:0] sel_x = 0;
 reg [2:0] sel_y = 0;
 
 wire [9:0] x_adj = (x < 10'd80) ? 10'd0 : (x - 10'd80);
-
-// Pixel tile under screen coordinates
 wire [3:0] tile_x = x_adj / TILE_SIZE;
 wire [3:0] tile_y = y / TILE_SIZE;
-
 wire [5:0] tile_index = tile_y * GRID_SIZE + tile_x;
-
 
 //------------------------------------------------------
 // Movement key edge detection
@@ -56,7 +54,6 @@ always @(posedge clk or negedge rst) begin
     end
 end
 
-
 //------------------------------------------------------
 // Border detection for cursor highlight
 //------------------------------------------------------
@@ -76,37 +73,29 @@ wire on_border =
      (y - sel_y0 < BORDER) ||
      (sel_y1 - y <= BORDER));
 
-
 //------------------------------------------------------
 // Adjacency number & color
 //------------------------------------------------------
 wire [3:0] adj_here = adj[tile_index*4 +: 4];
-
 wire [23:0] adj_color;
-tile_color tc (
-    .count(adj_here),
-    .color(adj_color)
-);
-
+tile_color tc (.count(adj_here), .color(adj_color));
 
 //------------------------------------------------------
-// Flag / reveal button edge detection
+// Flag / reveal switch edge detection (SW9 flag, SW8 reveal)
 //------------------------------------------------------
-reg flag_prev, reveal_prev;
-
+reg sw9_prev, sw8_prev;
 always @(posedge clk or negedge rst) begin
     if (!rst) begin
-        flag_prev   <= 0;
-        reveal_prev <= 0;
+        sw9_prev <= 0;
+        sw8_prev <= 0;
     end else begin
-        flag_prev   <= switches[1];
-        reveal_prev <= switches[0];
+        sw9_prev <= switches[9];
+        sw8_prev <= switches[8];
     end
 end
 
-wire flag_edge   = switches[1] & ~flag_prev;   // one-shot flag toggle
-wire reveal_edge = switches[0] & ~reveal_prev; // one-shot reveal
-
+wire flag_edge   = switches[9] & ~sw9_prev;   // one-shot flag toggle
+wire reveal_edge = switches[8] & ~sw8_prev;   // one-shot reveal
 
 //------------------------------------------------------
 // Tile state (flag + reveal storage)
@@ -121,13 +110,23 @@ tile_state state (
     .flag(flag_edge),
     .reveal(reveal_edge),
     .flagged(flagged_w),
-    .revealed(revealed_w)
+    .revealed(revealed_w),
+    .reveal_count(reveal_count)
 );
 
 wire mine_here     = mine_map[tile_index];
 wire flagged_here  = flagged_w[tile_index];
 wire revealed_here = revealed_w[tile_index];
 
+//------------------------------------------------------
+// Mine found latch
+//------------------------------------------------------
+always @(posedge clk or negedge rst) begin
+    if (!rst)
+        mine_found <= 1'b0;
+    else if (revealed_here && mine_here)
+        mine_found <= 1'b1;
+end
 
 //------------------------------------------------------
 // Output color logic
@@ -137,22 +136,16 @@ wire checker = (tile_x + tile_y) & 1;
 always @(*) begin
     if (!active_pixels)
         color_out = 24'h000000;
-
     else if (on_border)
         color_out = 24'hFFFF00; // cursor highlight
-
     else if (!revealed_here && flagged_here)
         color_out = 24'hFF00FF; // flag (magenta)
-
     else if (!revealed_here)
         color_out = checker ? 24'h5E8F54 : 24'h8CC783; // hidden tile
-
     else if (revealed_here && mine_here)
-        color_out = 24'h000000; // revealed mine (red)
-
+        color_out = 24'hFF0000; // revealed mine
     else if (adj_here != 0)
         color_out = adj_color; // number tile
-
     else
         color_out = 24'hFFFFFF; // revealed empty tile
 end
