@@ -16,20 +16,23 @@ module game_controller (
     // -------------------------------------------------------
     // Parameters (FIXED)
     // -------------------------------------------------------
-    parameter NUM_TILES          = 5;
+    parameter NUM_TILES          = 8;
     parameter TOTAL_SQUARES      = NUM_TILES * NUM_TILES;
-    parameter NUM_MINES          = 6;
+    parameter NUM_MINES          = 10;
 
     // -------------------------------------------------------
     // Mine map (25 bits for a 5×5 grid)
     // -------------------------------------------------------
-    wire [TOTAL_SQUARES-1:0] mine_map = {
-        5'b01000,
-        5'b00011,
-        5'b10000,
-        5'b01100,
-        5'b00000
-    };
+    wire [TOTAL_SQUARES - 1:0] mine_map = {
+    8'b00000001, // row 0
+    8'b00010000, // row 1
+    8'b00001000, // row 2
+    8'b00000100, // row 3
+    8'b10000000, // row 4
+    8'b00100010, // row 5
+    8'b01000000, // row 6
+    8'b00000011  // row 7
+};
 
     // -------------------------------------------------------
     // Adjacency calculation via adj_fsm
