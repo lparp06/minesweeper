@@ -9,7 +9,7 @@ module minesweeper(
 
    wire clk   = CLOCK_50;
    wire rst   = SW[0];
-   wire start = SW[1];
+   wire start = ~KEY[3];
 
    wire active_pixels;
    wire [9:0] x, y;
@@ -47,7 +47,8 @@ module minesweeper(
    // Top-level FSM for screen control
    localparam START=0, PLAYING=1, DONE=2;
    reg [1:0] S, NS;
-   always @(posedge clk or negedge rst) S <= !rst ? START : NS;
+   always @(posedge clk or negedge rst) 
+		S <= !rst ? START : NS;
    always @(*) begin
        case(S)
            START:   NS = start ? PLAYING : START;
