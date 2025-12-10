@@ -1,7 +1,3 @@
-// ================================================
-// TILE STATE MODULE
-// Stores flagged and revealed tile arrays
-// ================================================
 module tile_state #(
     parameter GRID_SIZE   = 8,
     parameter TOTAL_TILES = GRID_SIZE*GRID_SIZE,
@@ -18,7 +14,18 @@ module tile_state #(
     output reg  [TOTAL_TILES-1:0]   revealed       // persistent reveal state
 );
 
-    // mask for single-tile reveal
+    // Edge detection for the flag input
+    reg flag_prev;
+    wire flag_edge = flag & ~flag_prev;
+
+    always @(posedge clk or negedge rst) begin
+        if (!rst)
+            flag_prev <= 0;
+        else
+            flag_prev <= flag;
+    end
+
+    // Mask for single-tile reveal
     wire [TOTAL_TILES-1:0] single_reveal_mask =
         (reveal && !flagged[tile_index]) ? (1'b1 << tile_index) : {TOTAL_TILES{1'b0}};
 
@@ -27,14 +34,15 @@ module tile_state #(
             flagged  <= {TOTAL_TILES{1'b0}};
             revealed <= {TOTAL_TILES{1'b0}};
         end else begin
-            // Toggle flag for selected tile
-            if (flag)
+            // Toggle flag on detected edge only
+            if (flag_edge)
                 flagged[tile_index] <= ~flagged[tile_index];
 
-            // Merge all reveal sources in one assignment
+            // Merge all reveal sources
             revealed <= revealed
                       | single_reveal_mask
                       | (flood_apply ? flood_update : {TOTAL_TILES{1'b0}});
         end
     end
+
 endmodule

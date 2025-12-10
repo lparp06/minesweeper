@@ -7,6 +7,7 @@ module adj_fsm
 (
     input  wire clk,
     input  wire rst,
+    input  wire start,                         // <-- NEW
     input  wire [TOTAL_SQUARES-1:0] mine_map,
     output reg  [TOTAL_SQUARES*4-1:0] adj,
     output reg done
@@ -21,6 +22,21 @@ localparam IDLE      = 2'd0,
 reg  [INDEX_WIDTH-1:0] tile_index;
 wire [3:0] tile_count;
 
+// NEW: latch the start pulse (one-shot)
+reg start_armed;
+
+always @(posedge clk or negedge rst) begin
+    if (!rst)
+        start_armed <= 0;
+    else if (start)
+        start_armed <= 1;
+    else if (S != IDLE)
+        start_armed <= 0; // consume start once FSM leaves IDLE
+end
+
+//----------------------------------------------------------
+// Neighbor checker (unchanged)
+//----------------------------------------------------------
 neighbor_check #(
     .NUM_SQUARES(GRID_SIZE),
     .INDEX_LENGTH(INDEX_WIDTH)
@@ -41,23 +57,28 @@ always @(posedge clk or negedge rst) begin
 end
 
 //----------------------------------------------------------
-// Next-state logic
+// Next-state logic (minimal modification)
 //----------------------------------------------------------
 always @(*) begin
     case (S)
-        IDLE:       NS = NEXT_TILE;
 
-        NEXT_TILE:  
+        IDLE:
+            NS = start_armed ? NEXT_TILE : IDLE;   // <-- DON'T RUN UNTIL start
+
+        NEXT_TILE:
             NS = (tile_index == TOTAL_SQUARES-1) ? DONE : NEXT_TILE;
 
-        DONE:       NS = DONE;
+        DONE:
+            NS = DONE;
 
-        default:    NS = DONE;
+        default:
+            NS = DONE;
+
     endcase
 end
 
 //----------------------------------------------------------
-// Output logic and tile counter
+// Output logic and tile counter (unchanged except IDLE gate)
 //----------------------------------------------------------
 always @(posedge clk or negedge rst) begin
     if (!rst) begin
@@ -66,6 +87,7 @@ always @(posedge clk or negedge rst) begin
         adj        <= {TOTAL_SQUARES*4{1'b0}};
     end else begin
         case (S)
+
             IDLE: begin
                 tile_index <= 0;
                 done       <= 0;
@@ -83,6 +105,7 @@ always @(posedge clk or negedge rst) begin
             DONE: begin
                 done <= 1;
             end
+
         endcase
     end
 end
