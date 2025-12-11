@@ -30,19 +30,20 @@ module tile_state #(
         (reveal && !flagged[tile_index]) ? (1'b1 << tile_index) : {TOTAL_TILES{1'b0}};
 
     always @(posedge clk or negedge rst) begin
-        if (!rst) begin
-            flagged  <= {TOTAL_TILES{1'b0}};
-            revealed <= {TOTAL_TILES{1'b0}};
-        end else begin
-            // Toggle flag on detected edge only
-            if (flag_edge)
-                flagged[tile_index] <= ~flagged[tile_index];
+    if (!rst) begin
+        flagged  <= {TOTAL_TILES{1'b0}};
+        revealed <= {TOTAL_TILES{1'b0}};
+    end else begin
+        // Toggle flag on pulse
+        if (flag)
+            flagged[tile_index] <= ~flagged[tile_index];
 
-            // Merge all reveal sources
-            revealed <= revealed
-                      | single_reveal_mask
-                      | (flood_apply ? flood_update : {TOTAL_TILES{1'b0}});
-        end
+        // Merge reveals
+        revealed <= revealed
+                  | single_reveal_mask
+                  | (flood_apply ? flood_update : {TOTAL_TILES{1'b0}});
     end
+	end
+
 
 endmodule

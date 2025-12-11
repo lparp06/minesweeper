@@ -1,3 +1,6 @@
+// -----------------------------------------------------------
+// game_controller.v - Minesweeper top-level controller
+// -----------------------------------------------------------
 module game_controller (
     input  wire        clk,
     input  wire        rst,             // active-low
@@ -9,6 +12,7 @@ module game_controller (
     input  wire [9:0]  SW,
     output wire [23:0] color_out,
     output wire [5:0]  reveal_count,    // for 8x8, 64 -> needs 6 bits
+    output wire [5:0]  flag_count,      // for 8x8, 64 -> needs 6 bits
     output reg         endgame,
     output reg         win
 );
@@ -28,20 +32,68 @@ module game_controller (
     wire                     mines_done;
 
     wire [TOTAL_SQUARES*4-1:0] adj;
-    wire                      adj_done_pulse; // one-cycle done pulse from adj_fsm
+    wire                       adj_done_pulse;
 
-    wire                      render_first_click; // pulse from render on first reveal
-    wire [INDEX_BITS-1:0]     render_start_index;
-    wire                      render_mine_found;
-    // reveal_count and color_out are outputs from render
-    // (already declared as outputs of top-level)
+    wire                       render_first_click;
+    wire [INDEX_BITS-1:0]      render_start_index;
+    wire                       render_mine_found;
 
-    // single-cycle pulse from controller to adj_fsm to start adjacency calculation
-    reg adj_start_pulse;
+    reg  [INDEX_BITS-1:0]      first_click_index;
+    reg                        first_click_seen;
 
     // -------------------------------------------------------
-    // Instantiate random mine generator
-    // (it latches the first_click and root index)
+    // FSM states
+    // -------------------------------------------------------
+    localparam START        = 3'd0,
+               WAIT_CLICK   = 3'd1,
+               GENERATE_MAP = 3'd2,
+               GENERATE_ADJ = 3'd3,
+               PLAY         = 3'd4,
+               DONE         = 3'd5;
+
+    reg [2:0] S, NS;
+
+    // State register
+    always @(posedge clk or negedge rst) begin
+        if (!rst) S <= START;
+        else      S <= NS;
+    end
+
+    // Next-state logic
+    always @(*) begin
+        NS = S;
+        case (S)
+            START:       NS = start ? WAIT_CLICK : START;
+            WAIT_CLICK:  NS = render_first_click ? GENERATE_MAP : WAIT_CLICK;
+            GENERATE_MAP: NS = mines_done ? GENERATE_ADJ : GENERATE_MAP;
+            GENERATE_ADJ: NS = adj_done_pulse ? PLAY : GENERATE_ADJ;
+            PLAY:        NS = (render_mine_found || (reveal_count == TOTAL_SQUARES - NUM_MINES)) ? DONE : PLAY;
+            DONE:        NS = DONE;
+            default:     NS = START;
+        endcase
+    end
+
+    // -------------------------------------------------------
+    // State-entry pulses
+    // -------------------------------------------------------
+    wire enter_GENERATE_MAP = (S != GENERATE_MAP) && (NS == GENERATE_MAP);
+    wire enter_GENERATE_ADJ = (S != GENERATE_ADJ) && (NS == GENERATE_ADJ);
+
+    // -------------------------------------------------------
+    // Latch first click for safe mine placement
+    // -------------------------------------------------------
+    always @(posedge clk or negedge rst) begin
+        if (!rst) begin
+            first_click_seen  <= 1'b0;
+            first_click_index <= {INDEX_BITS{1'b0}};
+        end else if (S == WAIT_CLICK && render_first_click) begin
+            first_click_seen  <= 1'b1;
+            first_click_index <= render_start_index;
+        end
+    end
+
+    // -------------------------------------------------------
+    // Random mine generator
     // -------------------------------------------------------
     random_mine_generator #(
         .GRID_SIZE(NUM_TILES),
@@ -51,24 +103,35 @@ module game_controller (
     ) mine_gen (
         .clk(clk),
         .rst(rst),
-        .first_click(render_first_click),    // pulse from render when player reveals first tile
-        .root_index(render_start_index),
+        .first_click(enter_GENERATE_MAP), // one-cycle pulse
+        .root_index(first_click_index),   // safe tile
         .mine_map(mine_map),
         .done(mines_done)
     );
-    // adj_fsm instance (starts on adj_start_pulse, returns a one-cycle done_pulse)
-		adj_fsm #(
-		 .GRID_SIZE(NUM_TILES)
-	) adj_gen (
-		 .clk(clk),
-		 .rst(rst),
-		 .start(adj_start_pulse),   // <-- NEW start pulse
-		 .mine_map(mine_map),
-		 .adj(adj),
-		 .done(adj_done_pulse)      // <-- same name as your controller FSM uses
-	);
 
-    // render instance (uses .start and .start_index outputs for first-click)
+    // -------------------------------------------------------
+    // Adjacency generator FSM
+    // -------------------------------------------------------
+    reg adj_start_pulse;
+    always @(posedge clk or negedge rst) begin
+        if (!rst) adj_start_pulse <= 1'b0;
+        else      adj_start_pulse <= enter_GENERATE_ADJ;
+    end
+
+    adj_fsm #(
+        .GRID_SIZE(NUM_TILES)
+    ) adj_gen (
+        .clk(clk),
+        .rst(rst),
+        .start(adj_start_pulse),
+        .mine_map(mine_map),
+        .adj(adj),
+        .done(adj_done_pulse)
+    );
+
+    // -------------------------------------------------------
+    // Render module
+    // -------------------------------------------------------
     render #(
         .GRID_SIZE(NUM_TILES)
     ) board (
@@ -81,86 +144,17 @@ module game_controller (
         .switches(SW),
         .mine_map(mine_map),
         .adj(adj),
+        .game_ready(S == PLAY),
         .color_out(color_out),
-        .start(render_first_click),         // pulse for first click (was 'first_click' in older code)
-        .start_index(render_start_index),   // index of first clicked tile
+        .start(render_first_click),
+        .start_index(render_start_index),
         .reveal_count(reveal_count),
+        .flag_count(flag_count),
         .mine_found(render_mine_found)
     );
 
     // -------------------------------------------------------
-    // Top-level FSM
-    // -------------------------------------------------------
-    localparam START            = 3'd0,
-               WAIT_CLICK       = 3'd1,
-               GENERATE_MAP     = 3'd2,
-               GENERATE_ADJ     = 3'd3,
-               PLAY             = 3'd4,
-               DONE             = 3'd5;
-
-    reg [2:0] S, NS;
-
-    // State register
-    always @(posedge clk or negedge rst) begin
-        if (!rst) S <= START;
-        else      S <= NS;
-    end
-
-    // Next-state combinational
-    always @(*) begin
-        // default
-        NS = S;
-
-        case (S)
-            START: NS = start ? WAIT_CLICK : START;
-
-            WAIT_CLICK: begin
-                // wait for player to reveal first tile (render asserts first_click)
-                if (render_first_click) NS = GENERATE_MAP;
-                else NS = WAIT_CLICK;
-            end
-
-            GENERATE_MAP: begin
-                // wait for mine placement to finish
-                if (mines_done) NS = GENERATE_ADJ;
-                else NS = GENERATE_MAP;
-            end
-
-            GENERATE_ADJ: begin
-                // wait for adjacency generator to complete
-                if (adj_done_pulse) NS = PLAY;
-                else NS = GENERATE_ADJ;
-            end
-
-            PLAY: begin
-                if (render_mine_found || (reveal_count == TOTAL_SQUARES - NUM_MINES)) NS = DONE;
-                else NS = PLAY;
-            end
-
-            DONE: NS = DONE; // sticky; can add restart logic later
-
-            default: NS = START;
-        endcase
-    end
-
-    // -------------------------------------------------------
-    // Control signals and pulses
-    // -------------------------------------------------------
-    // adj_start_pulse should be asserted for one clock when entering GENERATE_ADJ
-    reg adj_start_q;
-    always @(posedge clk or negedge rst) begin
-        if (!rst) begin
-            adj_start_pulse <= 1'b0;
-            adj_start_q <= 1'b0;
-        end else begin
-            // detect entry to GENERATE_ADJ
-            adj_start_pulse <= (S == GENERATE_MAP) && (NS == GENERATE_ADJ);
-            adj_start_q <= adj_start_pulse;
-        end
-    end
-
-    // -------------------------------------------------------
-    // Outputs: endgame & win
+    // Endgame & win outputs
     // -------------------------------------------------------
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
