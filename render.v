@@ -90,18 +90,18 @@ module render #(
     // -----------------------------
     // Switch edge detection
     // -----------------------------
-    reg sw8_prev, sw9_prev;
+    reg sw8_prev, sw7_prev;
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
             sw8_prev <= 1'b0;
-            sw9_prev <= 1'b0;
+            sw7_prev <= 1'b0;
         end else begin
             sw8_prev <= switches[8];
-            sw9_prev <= switches[9];
+            sw7_prev <= switches[7];
         end
     end
     wire reveal_edge = switches[8] & ~sw8_prev;
-    wire flag_edge   = switches[9] & ~sw9_prev;
+    wire flag_edge   = switches[7] & ~sw7_prev;
 
     // -----------------------------
     // First-click deferral
