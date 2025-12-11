@@ -60,7 +60,7 @@ module start_screen_renderer #(
     localparam L2_LEN = 19;
     localparam L2_0  = 8'd70; localparam L2_1  = 8'd76; localparam L2_2  = 8'd65;
     localparam L2_3  = 8'd71; localparam L2_4  = 8'd32; localparam L2_5  = 8'd83;
-    localparam L2_6  = 8'd87; localparam L2_7  = 8'd57; localparam L2_8  = 8'd32;
+    localparam L2_6  = 8'd87; localparam L2_7  = 8'd55; localparam L2_8  = 8'd32;
     localparam L2_9  = 8'd82; localparam L2_10 = 8'd69; localparam L2_11 = 8'd86;
     localparam L2_12 = 8'd69; localparam L2_13 = 8'd65; localparam L2_14 = 8'd76;
     localparam L2_15 = 8'd32; localparam L2_16 = 8'd83; localparam L2_17 = 8'd87;
